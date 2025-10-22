@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gerenciador de Fluxos - Marionete</title>
+  <link rel="stylesheet" href="flows.css">
+</head>
+<body>
+  <div class="app">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h1>🎭 Marionete</h1>
+        <p>Gerenciador de Fluxos</p>
+      </div>
+
+      <div class="sidebar-section">
+        <h3>Meus Fluxos</h3>
+        <div id="flowList" class="flow-list-sidebar"></div>
+      </div>
+
+      <div class="sidebar-footer">
+        <button id="btnImport" class="btn-sidebar-secondary" title="Importar fluxo">
+          📥 Importar
+        </button>
+        <button id="btnNewFlow" class="btn-sidebar">
+          ➕ Novo Fluxo
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Toolbar -->
+      <div class="toolbar">
+        <div class="toolbar-left">
+          <h2 id="flowTitle">Selecione um fluxo</h2>
+        </div>
+        <div class="toolbar-right">
+          <button id="btnExport" class="btn btn-secondary" disabled>
+            📤 Exportar
+          </button>
+          <button id="btnDelete" class="btn btn-danger" disabled>
+            🗑️ Apagar
+          </button>
+          <button id="btnExecute" class="btn btn-primary" disabled>
+            ▶️ Executar
+          </button>
+        </div>
+      </div>
+
+      <!-- Speed Selector -->
+      <div id="speedSelector" class="speed-selector hidden">
+        <label>Velocidade de reprodução:</label>
+        <div class="speed-options">
+          <button class="speed-btn" data-speed="0.5">0.5×</button>
+          <button class="speed-btn active" data-speed="1">1×</button>
+          <button class="speed-btn" data-speed="2">2×</button>
+          <button class="speed-btn" data-speed="4">4×</button>
+        </div>
+      </div>
+
+      <!-- Flow Details -->
+      <div id="flowDetails" class="flow-details hidden">
+        <div class="detail-card">
+          <h3>Informações</h3>
+          <div class="detail-grid">
+            <div class="detail-item">
+              <span class="detail-label">URL Inicial:</span>
+              <span id="detailUrl" class="detail-value"></span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Ações:</span>
+              <span id="detailActions" class="detail-value"></span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Duração:</span>
+              <span id="detailDuration" class="detail-value"></span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Variáveis:</span>
+              <span id="detailVariables" class="detail-value">0</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Variables Section -->
+        <div id="variablesSection" class="detail-card hidden">
+          <div class="section-header">
+            <h3>🔤 Variáveis do Fluxo</h3>
+            <span class="help-text">Clique no ícone 🔤 ao lado de um valor para converter em variável</span>
+          </div>
+          <div id="variablesList" class="variables-list"></div>
+        </div>
+
+        <!-- Action Steps -->
+        <div class="steps-container">
+          <div class="steps-header">
+            <h3>Passos do Fluxo</h3>
+            <span id="stepCount" class="step-count"></span>
+          </div>
+          <div id="stepsList" class="steps-list"></div>
+        </div>
+      </div>
+
+      <!-- Empty State -->
+      <div id="emptyState" class="empty-state-main">
+        <div class="empty-icon">📋</div>
+        <h2>Nenhum fluxo selecionado</h2>
+        <p>Selecione um fluxo na barra lateral ou crie um novo</p>
+      </div>
+    </main>
+  </div>
+
+  <!-- Variable Input Modal -->
+  <div id="variableModal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>🔤 Configurar Variável</h3>
+        <button class="modal-close" id="closeVariableModal">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Nome da Variável:</label>
+          <input type="text" id="variableName" placeholder="ex: email, nome, senha" />
+          <small>Use nomes descritivos sem espaços</small>
+        </div>
+        <div class="form-group">
+          <label>Valor Atual:</label>
+          <input type="text" id="variableValue" readonly />
+        </div>
+        <div class="form-group">
+          <label>
+            <input type="checkbox" id="variableSensitive" />
+            Informação sensível (ocultar durante execução)
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="cancelVariable">Cancelar</button>
+        <button class="btn btn-primary" id="saveVariable">Salvar Variável</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Execution Variables Modal -->
+  <div id="executionModal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>▶️ Valores das Variáveis</h3>
+      </div>
+      <div class="modal-body">
+        <p class="modal-description">Preencha os valores para executar o fluxo:</p>
+        <div id="executionVariableInputs"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="cancelExecution">Cancelar</button>
+        <button class="btn btn-primary" id="startExecution">▶️ Executar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden file input for import -->
+  <input type="file" id="fileInput" accept=".json" style="display: none;" />
+
+  <!-- Sortable.js for drag-and-drop -->
+  <script src="Sortable.min.js"></script>
+  <script src="flows.js"></script>
+</body>
+</html>

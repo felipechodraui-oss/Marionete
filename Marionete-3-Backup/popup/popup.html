@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Marionete</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <h1>🎭 Marionete</h1>
+      <div class="version">v1.0.0</div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="record">
+        <span class="tab-icon">⏺️</span>
+        Gravar
+      </button>
+      <button class="tab-btn" data-tab="manage">
+        <span class="tab-icon">📋</span>
+        Fluxos
+      </button>
+    </div>
+
+    <!-- Record Tab -->
+    <div class="tab-content active" data-content="record">
+      <div class="section">
+        <h2>Gravar Novo Fluxo</h2>
+        <p class="description">
+          Capture suas ações nesta página automaticamente
+        </p>
+
+        <div class="button-group">
+          <button id="btnStart" class="btn btn-primary btn-large">
+            <span class="btn-icon">🎥</span>
+            Iniciar Gravação
+          </button>
+
+          <button id="btnPause" class="btn btn-secondary btn-large" disabled>
+            <span class="btn-icon">⏸️</span>
+            Pausar
+          </button>
+
+          <button id="btnStop" class="btn btn-danger btn-large" disabled>
+            <span class="btn-icon">⏹️</span>
+            Parar e Salvar
+          </button>
+        </div>
+
+        <!-- Recording Status -->
+        <div id="recordingStatus" class="status-box hidden">
+          <div class="status-header">
+            <span class="status-indicator recording"></span>
+            <strong>GRAVANDO</strong>
+          </div>
+          <div class="status-info">
+            <div class="status-item">
+              <span class="label">Ações capturadas:</span>
+              <span id="actionCount" class="value">0</span>
+            </div>
+            <div class="status-item">
+              <span class="label">Duração:</span>
+              <span id="duration" class="value">0s</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Messages -->
+        <div id="message" class="message hidden"></div>
+      </div>
+    </div>
+
+    <!-- Manage Tab -->
+    <div class="tab-content" data-content="manage">
+      <div class="section">
+        <h2>Gerenciar Fluxos</h2>
+        <p class="description">
+          Edite, execute e organize seus fluxos salvos
+        </p>
+
+        <button id="btnOpenManager" class="btn btn-primary btn-large">
+          <span class="btn-icon">🚀</span>
+          Abrir Gerenciador Completo
+        </button>
+
+        <!-- Quick Flow List -->
+        <div class="quick-flows">
+          <h3>Fluxos Recentes</h3>
+          <div id="recentFlows" class="flow-list">
+            <div class="empty-state">
+              Nenhum fluxo salvo ainda
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <a href="#" id="btnHelp" class="footer-link">❓ Ajuda</a>
+      <a href="#" id="btnSettings" class="footer-link">⚙️ Configurações</a>
+    </div>
+  </div>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
