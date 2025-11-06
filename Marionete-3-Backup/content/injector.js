@@ -210,6 +210,12 @@ if (!window.__MARIONETE_INJECTED__) {
 
     // Check if recording should be restored (page loaded during active recording)
     setTimeout(() => {
+      // Check if runtime is still available
+      if (!chrome.runtime?.id) {
+        console.log('[Marionete Content] Extension context invalidated');
+        return;
+      }
+
       chrome.runtime.sendMessage({ type: 'GET_RECORDING_STATE' })
         .then(response => {
           if (response?.success && response.state.isRecording) {
@@ -218,8 +224,12 @@ if (!window.__MARIONETE_INJECTED__) {
           }
         })
         .catch(err => {
-          // Background might not be available yet
-          console.log('[Marionete Content] Could not check recording state:', err);
+          // Ignore back/forward cache errors silently
+          if (!err.message || 
+              (!err.message.includes('back/forward cache') && 
+               !err.message.includes('message port closed'))) {
+            console.log('[Marionete Content] Could not check recording state:', err.message);
+          }
         });
     }, 500);
 
@@ -227,7 +237,11 @@ if (!window.__MARIONETE_INJECTED__) {
     window.addEventListener('beforeunload', () => {
       if (recorder.isRecording) {
         // Final sync before unload
-        recorder.syncActionsToBackground();
+        try {
+          recorder.syncActionsToBackground();
+        } catch (err) {
+          // Ignore errors during unload
+        }
       }
     });
 
@@ -235,7 +249,11 @@ if (!window.__MARIONETE_INJECTED__) {
     document.addEventListener('visibilitychange', () => {
       if (document.hidden && recorder.isRecording) {
         // Sync when tab becomes hidden
-        recorder.syncActionsToBackground();
+        try {
+          recorder.syncActionsToBackground();
+        } catch (err) {
+          // Ignore errors
+        }
       }
     });
 

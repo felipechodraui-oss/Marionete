@@ -181,19 +181,36 @@ class Recorder {
   }
 
   syncActionsToBackground() {
-    chrome.runtime.sendMessage({
-      type: 'SYNC_ACTIONS',
-      data: {
-        actions: this.actions
-      }
-    }).then(response => {
-      if (response?.success) {
-        this.lastSyncTime = Date.now();
-        console.log('[Marionete] Synced to background. Total:', response.totalActions);
-      }
-    }).catch(err => {
-      console.warn('[Marionete] Sync failed:', err);
-    });
+    // Check if we can communicate with background
+    if (!chrome.runtime?.id) {
+      console.warn('[Marionete] Extension context invalidated, cannot sync');
+      return;
+    }
+
+    try {
+      chrome.runtime.sendMessage({
+        type: 'SYNC_ACTIONS',
+        data: {
+          actions: this.actions
+        }
+      }).then(response => {
+        if (response?.success) {
+          this.lastSyncTime = Date.now();
+          console.log('[Marionete] Synced to background. Total:', response.totalActions);
+        }
+      }).catch(err => {
+        // Ignore back/forward cache errors
+        if (err.message && err.message.includes('back/forward cache')) {
+          console.log('[Marionete] Page in back/forward cache, sync skipped');
+        } else if (err.message && err.message.includes('message port closed')) {
+          console.log('[Marionete] Message port closed, sync skipped');
+        } else {
+          console.warn('[Marionete] Sync failed:', err);
+        }
+      });
+    } catch (err) {
+      console.warn('[Marionete] Cannot sync:', err);
+    }
   }
 
   handleClick(event) {
@@ -343,48 +360,87 @@ class Recorder {
 
   setupNavigationTracking() {
     let lastUrl = window.location.href;
+    let checkCount = 0;
     
     const checkUrlChange = () => {
       if (!this.isRecording) return;
       
+      checkCount++;
       const currentUrl = window.location.href;
+      
       if (currentUrl !== lastUrl) {
+        // URL changed
+        console.log('[Marionete] URL change detected', { from: lastUrl, to: currentUrl });
         this.handleNavigation(currentUrl);
         lastUrl = currentUrl;
+        checkCount = 0; // Reset count
+      }
+      
+      // Periodic logging for debugging (every 10 checks = 5 seconds)
+      if (checkCount % 10 === 0) {
+        console.log('[Marionete] Recording active, monitoring URL...', {
+          currentUrl,
+          actions: this.actions.length
+        });
       }
     };
 
     // Multiple tracking methods for better compatibility
     
     // 1. MutationObserver for DOM changes (SPAs)
-    const observer = new MutationObserver(checkUrlChange);
-    observer.observe(document, { subtree: true, childList: true });
-    this.navigationObserver = observer;
+    try {
+      const observer = new MutationObserver(checkUrlChange);
+      observer.observe(document, { subtree: true, childList: true });
+      this.navigationObserver = observer;
+    } catch (err) {
+      console.warn('[Marionete] MutationObserver failed:', err);
+    }
 
     // 2. History API interception
-    const originalPushState = history.pushState;
-    const originalReplaceState = history.replaceState;
-    
-    history.pushState = function(...args) {
-      originalPushState.apply(this, args);
-      checkUrlChange();
-    };
-    
-    history.replaceState = function(...args) {
-      originalReplaceState.apply(this, args);
-      checkUrlChange();
-    };
+    try {
+      const originalPushState = history.pushState;
+      const originalReplaceState = history.replaceState;
+      
+      history.pushState = function(...args) {
+        const result = originalPushState.apply(this, args);
+        checkUrlChange();
+        return result;
+      };
+      
+      history.replaceState = function(...args) {
+        const result = originalReplaceState.apply(this, args);
+        checkUrlChange();
+        return result;
+      };
 
-    // Store originals for cleanup
-    this.originalPushState = originalPushState;
-    this.originalReplaceState = originalReplaceState;
+      // Store originals for cleanup
+      this.originalPushState = originalPushState;
+      this.originalReplaceState = originalReplaceState;
+    } catch (err) {
+      console.warn('[Marionete] History API interception failed:', err);
+    }
 
-    // 3. Polling as fallback
+    // 3. Polling as fallback (more frequent for Brazilian sites)
     this.urlCheckInterval = setInterval(checkUrlChange, 500);
 
     // 4. Listen to popstate (back/forward)
-    window.addEventListener('popstate', checkUrlChange);
     this.popstateHandler = checkUrlChange;
+    window.addEventListener('popstate', this.popstateHandler);
+
+    // 5. Listen to hashchange (some sites use hash routing)
+    this.hashchangeHandler = checkUrlChange;
+    window.addEventListener('hashchange', this.hashchangeHandler);
+
+    // 6. Page visibility change (tab switch detection)
+    this.visibilityHandler = () => {
+      if (!document.hidden && this.isRecording) {
+        console.log('[Marionete] Tab visible again, checking URL...');
+        checkUrlChange();
+      }
+    };
+    document.addEventListener('visibilitychange', this.visibilityHandler);
+
+    console.log('[Marionete] Navigation tracking initialized with 6 methods');
   }
 
   handleNavigation(newUrl) {
@@ -465,6 +521,14 @@ class Recorder {
 
     if (this.popstateHandler) {
       window.removeEventListener('popstate', this.popstateHandler);
+    }
+
+    if (this.hashchangeHandler) {
+      window.removeEventListener('hashchange', this.hashchangeHandler);
+    }
+
+    if (this.visibilityHandler) {
+      document.removeEventListener('visibilitychange', this.visibilityHandler);
     }
   }
 }

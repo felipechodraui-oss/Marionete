@@ -41,7 +41,10 @@ class SelectorEngine {
     // Level 3.5: data-testid (very common in modern apps)
     const testId = element.getAttribute('data-testid') || 
                    element.getAttribute('data-test-id') ||
-                   element.getAttribute('data-test');
+                   element.getAttribute('data-test') ||
+                   element.getAttribute('data-qa') ||
+                   element.getAttribute('data-cy') ||
+                   element.getAttribute('data-selenium');
     if (testId) {
       selectors.testId = `[data-testid="${CSS.escape(testId)}"]`;
     }
@@ -124,11 +127,14 @@ class SelectorEngine {
    * Find element in a specific document/shadow root
    */
   static findInDocument(doc, selectors) {
+    let foundElements = [];
+
     // Level 1: ID
     if (selectors.id) {
       try {
         const el = doc.querySelector(selectors.id);
-        if (el) return el;
+        if (el && this.isElementVisible(el)) return el;
+        if (el) foundElements.push(el);
       } catch (e) { /* Invalid selector */ }
     }
 
@@ -136,7 +142,8 @@ class SelectorEngine {
     if (selectors.name) {
       try {
         const el = doc.querySelector(selectors.name);
-        if (el) return el;
+        if (el && this.isElementVisible(el)) return el;
+        if (el) foundElements.push(el);
       } catch (e) { /* Invalid selector */ }
     }
 
@@ -144,7 +151,8 @@ class SelectorEngine {
     if (selectors.testId) {
       try {
         const el = doc.querySelector(selectors.testId);
-        if (el) return el;
+        if (el && this.isElementVisible(el)) return el;
+        if (el) foundElements.push(el);
       } catch (e) { /* Invalid selector */ }
     }
 
@@ -152,16 +160,21 @@ class SelectorEngine {
     if (selectors.linkText && selectors.tagName === 'a') {
       const links = Array.from(doc.getElementsByTagName('a'));
       const el = links.find(link => 
-        link.textContent.trim() === selectors.linkText
+        link.textContent.trim() === selectors.linkText && this.isElementVisible(link)
       );
       if (el) return el;
+      
+      // Try without visibility check
+      const elHidden = links.find(link => link.textContent.trim() === selectors.linkText);
+      if (elHidden) foundElements.push(elHidden);
     }
 
     // Level 5: Class name
     if (selectors.className) {
       try {
         const el = doc.querySelector(selectors.className);
-        if (el) return el;
+        if (el && this.isElementVisible(el)) return el;
+        if (el) foundElements.push(el);
       } catch (e) { /* Invalid selector */ }
     }
 
@@ -169,7 +182,8 @@ class SelectorEngine {
     if (selectors.css) {
       try {
         const el = doc.querySelector(selectors.css);
-        if (el) return el;
+        if (el && this.isElementVisible(el)) return el;
+        if (el) foundElements.push(el);
       } catch (e) { /* Invalid selector */ }
     }
 
@@ -183,7 +197,10 @@ class SelectorEngine {
           XPathResult.FIRST_ORDERED_NODE_TYPE,
           null
         );
-        if (result.singleNodeValue) return result.singleNodeValue;
+        if (result.singleNodeValue && this.isElementVisible(result.singleNodeValue)) {
+          return result.singleNodeValue;
+        }
+        if (result.singleNodeValue) foundElements.push(result.singleNodeValue);
       } catch (e) { /* Invalid XPath */ }
     }
 
@@ -191,21 +208,59 @@ class SelectorEngine {
     if (selectors.partialLinkText && selectors.tagName === 'a') {
       const links = Array.from(doc.getElementsByTagName('a'));
       const el = links.find(link => 
-        link.textContent.includes(selectors.partialLinkText)
+        link.textContent.includes(selectors.partialLinkText) && this.isElementVisible(link)
       );
       if (el) return el;
+      
+      const elHidden = links.find(link => link.textContent.includes(selectors.partialLinkText));
+      if (elHidden) foundElements.push(elHidden);
     }
 
     // Level 9: Text content matching (last resort)
     if (selectors.textContent && selectors.tagName) {
       const elements = Array.from(doc.getElementsByTagName(selectors.tagName));
       const el = elements.find(elem => 
-        elem.textContent?.trim().startsWith(selectors.textContent)
+        elem.textContent?.trim().startsWith(selectors.textContent) && this.isElementVisible(elem)
       );
       if (el) return el;
+      
+      const elHidden = elements.find(elem => 
+        elem.textContent?.trim().startsWith(selectors.textContent)
+      );
+      if (elHidden) foundElements.push(elHidden);
+    }
+
+    // If we found invisible elements but no visible ones, return the first invisible one
+    if (foundElements.length > 0) {
+      console.warn('[Selector Engine] Found element but not visible, returning anyway');
+      return foundElements[0];
     }
 
     return null;
+  }
+
+  /**
+   * Check if element is visible (simple check)
+   */
+  static isElementVisible(element) {
+    if (!element) return false;
+    
+    // Check if element is in DOM
+    if (!element.isConnected) return false;
+    
+    // Check basic CSS visibility
+    const style = window.getComputedStyle(element);
+    if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+      return false;
+    }
+    
+    // Check if element has dimensions
+    const rect = element.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) {
+      return false;
+    }
+    
+    return true;
   }
 
   /**
