@@ -166,13 +166,34 @@ async function handleExecuteFlow(data, sendResponse) {
     });
 
     await waitForTabLoad(tab.id);
+    
+    // Wait extra time for page to fully settle
+    await wait(1000);
+    
     await injectContentScript(tab.id);
-    await wait(500);
+    await wait(800);
 
-    const response = await chrome.tabs.sendMessage(tab.id, {
-      type: 'START_PLAYBACK',
-      data: { actions, speed }
-    });
+    // Use a more reliable message sending method
+    let retries = 3;
+    let response = null;
+    
+    while (retries > 0 && !response) {
+      try {
+        response = await chrome.tabs.sendMessage(tab.id, {
+          type: 'START_PLAYBACK',
+          data: { actions, speed }
+        });
+        break;
+      } catch (error) {
+        retries--;
+        if (retries > 0) {
+          console.log(`[Marionete BG] Retry sending playback message, ${retries} left`);
+          await wait(500);
+        } else {
+          throw error;
+        }
+      }
+    }
 
     sendResponse(response);
   } catch (error) {

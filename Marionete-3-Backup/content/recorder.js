@@ -228,45 +228,74 @@ class Recorder {
     const now = TimingEngine.now();
     const selectors = SelectorEngine.generateSelectors(targetElement);
     
+    // Enhanced action data with more context for better playback
     const action = {
       type: 'click',
       selectors,
       timing: TimingEngine.createTimingData('click', now, this.lastActionTime),
       url: window.location.href,
       elementType: targetElement.tagName.toLowerCase(),
-      textContent: targetElement.textContent?.trim().substring(0, 50) || ''
+      textContent: targetElement.textContent?.trim().substring(0, 100) || '',
+      // Additional context for better playback
+      elementContext: {
+        isButton: targetElement.tagName === 'BUTTON' || 
+                 targetElement.type === 'button' ||
+                 targetElement.type === 'submit',
+        isLink: targetElement.tagName === 'A',
+        hasOnClick: !!targetElement.onclick || !!targetElement.getAttribute('onclick'),
+        role: targetElement.getAttribute('role'),
+        ariaLabel: targetElement.getAttribute('aria-label'),
+        title: targetElement.getAttribute('title'),
+        href: targetElement.href || null
+      }
     };
 
     this.actions.push(action);
     this.lastActionTime = now;
 
     if (this.halo) {
-      this.halo.showHalo(targetElement, 'recording', `${this.actions.length}. Click`);
+      const label = action.elementContext.isButton ? 'Botão' : 
+                   action.elementContext.isLink ? 'Link' : 'Click';
+      this.halo.showHalo(targetElement, 'recording', `${this.actions.length}. ${label}`);
     }
 
     console.log('[Marionete] Captured click', { 
       step: this.actions.length,
       element: targetElement.tagName,
+      type: action.elementContext.isButton ? 'button' : 
+            action.elementContext.isLink ? 'link' : 'element',
+      text: action.textContent.substring(0, 30),
       delay: action.timing.delay 
     });
   }
 
   /**
    * Find the actual clickable element (button, link, etc.)
+   * More comprehensive search including Brazilian patterns
    */
   findClickableElement(element) {
     let current = element;
     let depth = 0;
     
-    while (current && depth < 5) {
+    while (current && depth < 6) { // Increased depth
       // Check if it's a clickable element
       if (current.tagName === 'A' || 
           current.tagName === 'BUTTON' ||
+          current.type === 'button' ||
+          current.type === 'submit' ||
           current.onclick ||
+          current.getAttribute('onclick') ||
           current.getAttribute('role') === 'button' ||
+          current.getAttribute('role') === 'link' ||
           current.getAttribute('data-testid') ||
+          current.getAttribute('data-action') ||
+          current.getAttribute('data-qa') ||
           current.classList.contains('btn') ||
-          current.classList.contains('button')) {
+          current.classList.contains('button') ||
+          current.classList.contains('link') ||
+          // Brazilian site patterns
+          current.classList.contains('botao') ||
+          current.classList.contains('botão')) {
         return current;
       }
       
