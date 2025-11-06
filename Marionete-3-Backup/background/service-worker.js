@@ -1,6 +1,17 @@
 /**
- * Background Service Worker - WITH URL VALIDATION
+ * Background Service Worker - WITH STATE PERSISTENCE & AUTO-RECOVERY
+ * Fixes: Recording lost on navigation, state synchronization
  */
+
+// Global recording state tracking
+const recordingState = {
+  isRecording: false,
+  tabId: null,
+  actions: [],
+  startUrl: null,
+  startTime: null,
+  lastSyncTime: null
+};
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   console.log('[Marionete BG] Received:', request.type);
@@ -15,8 +26,135 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
+  if (request.type === 'RECORDING_STARTED') {
+    handleRecordingStarted(sender.tab.id, request.data, sendResponse);
+    return true;
+  }
+
+  if (request.type === 'RECORDING_STOPPED') {
+    handleRecordingStopped(sendResponse);
+    return true;
+  }
+
+  if (request.type === 'SYNC_ACTIONS') {
+    handleSyncActions(request.data, sendResponse);
+    return true;
+  }
+
+  if (request.type === 'GET_RECORDING_STATE') {
+    sendResponse({ success: true, state: recordingState });
+    return true;
+  }
+
   return false;
 });
+
+// Monitor tab updates to re-inject content script during recording
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  if (!recordingState.isRecording || recordingState.tabId !== tabId) return;
+  
+  if (changeInfo.status === 'loading' && tab.url) {
+    console.log('[Marionete BG] Page navigating during recording:', tab.url);
+  }
+  
+  if (changeInfo.status === 'complete') {
+    console.log('[Marionete BG] Page loaded, re-injecting content script...');
+    
+    try {
+      await wait(500); // Wait for page to settle
+      await injectContentScript(tabId);
+      await wait(200);
+      
+      // Restore recording state
+      const response = await chrome.tabs.sendMessage(tabId, {
+        type: 'RESTORE_RECORDING',
+        data: {
+          actions: recordingState.actions,
+          startUrl: recordingState.startUrl,
+          startTime: recordingState.startTime
+        }
+      });
+      
+      if (response?.success) {
+        console.log('[Marionete BG] Recording state restored successfully');
+      }
+    } catch (error) {
+      console.error('[Marionete BG] Failed to restore recording:', error);
+    }
+  }
+});
+
+// Track when recording tab is closed
+chrome.tabs.onRemoved.addListener((tabId) => {
+  if (recordingState.isRecording && recordingState.tabId === tabId) {
+    console.warn('[Marionete BG] Recording tab closed, clearing state');
+    resetRecordingState();
+  }
+});
+
+async function handleRecordingStarted(tabId, data, sendResponse) {
+  recordingState.isRecording = true;
+  recordingState.tabId = tabId;
+  recordingState.startUrl = data.startUrl;
+  recordingState.startTime = data.startTime;
+  recordingState.actions = [];
+  recordingState.lastSyncTime = Date.now();
+  
+  console.log('[Marionete BG] Recording started, state saved', {
+    tabId,
+    startUrl: data.startUrl
+  });
+  
+  sendResponse({ success: true });
+}
+
+async function handleRecordingStopped(sendResponse) {
+  const data = {
+    actions: recordingState.actions,
+    startUrl: recordingState.startUrl,
+    startTime: recordingState.startTime
+  };
+  
+  resetRecordingState();
+  
+  console.log('[Marionete BG] Recording stopped, returning', data.actions.length, 'actions');
+  sendResponse({ success: true, data });
+}
+
+async function handleSyncActions(data, sendResponse) {
+  if (!recordingState.isRecording) {
+    sendResponse({ success: false, error: 'Not recording' });
+    return;
+  }
+  
+  // Merge new actions (avoid duplicates by timestamp)
+  const existingTimestamps = new Set(
+    recordingState.actions.map(a => a.timing?.timestamp).filter(Boolean)
+  );
+  
+  const newActions = data.actions.filter(action => {
+    return !action.timing?.timestamp || !existingTimestamps.has(action.timing.timestamp);
+  });
+  
+  recordingState.actions.push(...newActions);
+  recordingState.lastSyncTime = Date.now();
+  
+  console.log('[Marionete BG] Synced', newActions.length, 'new actions. Total:', recordingState.actions.length);
+  
+  sendResponse({ 
+    success: true, 
+    totalActions: recordingState.actions.length 
+  });
+}
+
+function resetRecordingState() {
+  recordingState.isRecording = false;
+  recordingState.tabId = null;
+  recordingState.actions = [];
+  recordingState.startUrl = null;
+  recordingState.startTime = null;
+  recordingState.lastSyncTime = null;
+}
 
 async function handleExecuteFlow(data, sendResponse) {
   try {
@@ -142,4 +280,4 @@ function wait(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-console.log('[Marionete BG] Service worker initialized');
+console.log('[Marionete BG] Service worker initialized with state persistence');
